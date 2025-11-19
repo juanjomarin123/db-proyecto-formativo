@@ -15,7 +15,7 @@ router = APIRouter()
 def create_user(
     user: CrearUsuario,
     db: Session = Depends(get_db),
-    user_token: RetornoUsuario = Depends(get_current_user)
+    user_token = Depends(get_current_user)  # ESTA LÍNEA ES LA CLAVE
 ):
     try:
         if user_token.id_rol != 1:

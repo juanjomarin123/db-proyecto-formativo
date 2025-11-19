@@ -23,10 +23,11 @@ def get_current_user(
     return user_db
 
 
-def authenticate_user(username: str, password: str, db: Session):
+def authenticate_user(db: Session, username: str, password: str):
     user = get_user_by_email_security(db, username)
     if not user:
         return False
     if not verify_password(password, user.contra_encript):
         return False
     return user
+

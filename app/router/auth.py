@@ -16,18 +16,30 @@ async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Session = Depends(get_db)
 ):
-    user = authenticate_user(form_data.username, form_data.password, db)
+    print("📌 Llegó a /token")
+    print("usuario recibido:", form_data.username)
+    print("password recibido:", form_data.password)
+
+    user = authenticate_user(db, form_data.username, form_data.password)
+
+    print("Resultado authenticate_user:", user)
+
     if not user:
+        print("❌ No pasó autenticación")
         raise HTTPException(
             status_code=401,
             detail="Datos Incorrectos en email o password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
     access_token = create_access_token(
-        data={"sub": str(user.id_usuario), "rol":user.id_rol}
+        data={"sub": str(user.id_usuario), "rol": user.id_rol}
     )
+    print("TOKEN CREADO:", access_token)
 
     return ResponseLoggin(
-    user=RetornoUsuario.model_validate(user, from_attributes=True),
-    access_token=access_token
-)
+        user=RetornoUsuario.model_validate(user, from_attributes=True),
+        access_token=access_token
+    )
+
+

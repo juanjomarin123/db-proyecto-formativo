@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
-from jose import JWTError
+from jose import jwt, JWTError
 from passlib.context import CryptContext
 from core.config import settings
-import jwt
+
 
 # Configurar hashing de contraseñas
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
