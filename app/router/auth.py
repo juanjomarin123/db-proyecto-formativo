@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends,HTTPException
 from sqlalchemy.orm import Session
 from app.router.dependencies import authenticate_user
 from app.schemas.auth import ResponseLoggin
+from app.schemas.usuarios import RetornoUsuario
 from core.security import create_access_token
 from core.database import get_db
 from fastapi.security import OAuth2PasswordRequestForm
@@ -27,6 +28,6 @@ async def login_for_access_token(
     )
 
     return ResponseLoggin(
-        user=user,
-        access_token=access_token
-    )
+    user=RetornoUsuario.model_validate(user, from_attributes=True),
+    access_token=access_token
+)
