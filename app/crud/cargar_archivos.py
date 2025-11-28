@@ -108,14 +108,15 @@ def insertar_redes_conocimiento(db, lista_redes):
 
 def insertar_programas_formacion(db: Session, lista_registros):
     """
-    Inserta o actualiza registros en Programas_formacion evitando errores,
-    siguiendo el mismo estilo que insertar_redes_conocimiento.
+    Inserta o actualiza registros en Programas_formacion y retorna
+    estadísticas separadas de inserciones vs actualizaciones
     lista_registros = [
         {"cod_programa": 123, "version": "001", "nombre": "Programa A", ...},
         ...
     ]
     """
     insertados = 0
+    actualizados = 0
     errores = []
 
     for registro in lista_registros:
@@ -132,8 +133,8 @@ def insertar_programas_formacion(db: Session, lista_registros):
 
             id_red = resultado[0]
 
-            # Insert / Update en Programas_formacion
-            db.execute(
+            # Insert / Update en Programas_formacion y CAPTURAR RESULTADO
+            result = db.execute(  # 👈 Capturamos el resultado
                 text("""
                     INSERT INTO Programas_formacion (
                         cod_programa, version, nombre, nivel, id_red, tiempo_dur, unidad_dur, estado, url_pdf
@@ -163,31 +164,33 @@ def insertar_programas_formacion(db: Session, lista_registros):
                 }
             )
 
-            insertados += 1
+            # 👇 DIFERENCIAR ENTRE INSERT Y UPDATE
+            if result.rowcount == 1:
+                # Se insertó un nuevo registro
+                insertados += 1
+            elif result.rowcount == 2:
+                # Se actualizó un registro existente (comportamiento de MySQL con ON DUPLICATE KEY)
+                actualizados += 1
 
         except Exception as e:
             errores.append(f"Error en {registro['cod_programa']}: {str(e)}")
 
     db.commit()
-    return {"insertados": insertados, "errores": errores}
-
-
-
+    
+    return {
+        "insertados": insertados,
+        "actualizados": actualizados,
+        "total_procesados": insertados + actualizados,  # 👈 Total real de operaciones
+        "errores": errores
+    }
 
 def actualizar_estado_y_duracion(db: Session, lista_registros):
     """
     Actualiza estado, tiempo_dur y unidad_dur usando el nombre del programa.
-    
-    lista_registros = [
-        {
-            "NOMBRE_PROGRAMA_FORMACION": "Tecnólogo en X",
-            "ESTADO_CURSO": "Activo",
-            "DURACION_PROGRAMA": 40
-        }
-    ]
+    Retorna estadísticas detalladas de programas encontrados vs no encontrados.
     """
-
     actualizados = 0
+    no_encontrados = 0
     errores = []
 
     for registro in lista_registros:
@@ -201,6 +204,7 @@ def actualizar_estado_y_duracion(db: Session, lista_registros):
             ).fetchone()
 
             if not res:
+                no_encontrados += 1
                 errores.append(f"No existe el programa: {nombre_prog}")
                 continue
 
@@ -213,7 +217,7 @@ def actualizar_estado_y_duracion(db: Session, lista_registros):
             unidad = "horas" if duracion > 30 else "meses"
 
             # Update SOLO esos 3 campos
-            db.execute(
+            result = db.execute(  # 👈 Capturamos el resultado
                 text("""
                     UPDATE Programas_formacion
                     SET estado = :estado,
@@ -229,7 +233,9 @@ def actualizar_estado_y_duracion(db: Session, lista_registros):
                 }
             )
 
-            actualizados += 1
+            # 👇 Verificar si realmente se actualizó el registro
+            if result.rowcount > 0:
+                actualizados += 1
 
         except Exception as e:
             errores.append(f"Error en {nombre_prog}: {str(e)}")
@@ -238,6 +244,8 @@ def actualizar_estado_y_duracion(db: Session, lista_registros):
 
     return {
         "actualizados": actualizados,
+        "no_encontrados": no_encontrados,  # 👈 Nuevo: programas que no existen
+        "total_procesados": actualizados + no_encontrados,  # 👈 Total de registros procesados
         "errores": errores
     }
 
