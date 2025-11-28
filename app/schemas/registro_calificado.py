@@ -19,8 +19,17 @@ class CrearRegistroCalificado(registroCalificadoBase):
     pass
 
 
-class RetornoRegistroCalificado(registroCalificadoBase):
+class RetornoRegistroCalificado(BaseModel):
     cod_programa: int
+    tipo_tramite: Optional[str] = Field(None, min_length=3, max_length=50)
+    fecha_radicado: Optional[date] = None
+    numero_resolucion: Optional[int] = None
+    fecha_resolucion: Optional[date] = None
+    fecha_vencimiento: Optional[date] = None
+    vigencia: Optional[str] = Field(None, min_length=1, max_length=25)
+    modalidad: Optional[str] = Field(None, min_length=3, max_length=25)
+    clasificacion: Optional[str] = Field(None, min_length=3, max_length=15)
+    estado_catalogo: Optional[bool] = None
 
 
 class EditarRegistroCalificado(BaseModel):

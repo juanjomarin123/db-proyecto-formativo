@@ -61,7 +61,7 @@ def get_programa_by_codPrograma(
     db: Session = Depends(get_db),
 ):
     try:
-            # Llama a la función CRUD para buscar el usuario por su ID.
+        # Llama a la función CRUD para buscar el usuario por su ID.
         programa = crud_programaFormacion.get_programaFormacion_by_codPrograma(db, cod_programa)
         # Verifica si se encontró el usuario.
         if programa is None:
@@ -69,7 +69,10 @@ def get_programa_by_codPrograma(
             raise HTTPException(status_code=404, detail="Programa no encontrado")
         # Retorna el objeto usuario encontrado (serializado según RetornoUsuario).
         return programa
-        # Captura errores específicos de SQLAlchemy (ej. problemas de conexión, sintaxis SQL).
+    # Re-lanzar HTTPException para que se propague correctamente
+    except HTTPException:
+        raise
+    # Captura errores específicos de SQLAlchemy (ej. problemas de conexión, sintaxis SQL).
     except SQLAlchemyError as e:
         # Lanza una excepción HTTP 500.
         raise HTTPException(status_code=500, detail=str(e))
@@ -126,9 +129,8 @@ def delete_by_cod(
         # Verifica si la eliminación fue exitosa (el CRUD debería retornar True si se eliminó).
         if programa:
             return {"message": "Programa eliminado correctamente"}
-    # Re-lanzar HTTPException para que se propague correctamente
-    except HTTPException:
-        raise
+        else:
+            raise HTTPException(status_code=404, detail="Programa no encontrado")
     # Re-lanzar HTTPException para que se propague correctamente
     except HTTPException:
         raise

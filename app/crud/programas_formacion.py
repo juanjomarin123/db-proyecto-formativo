@@ -101,6 +101,9 @@ def programaFormacion_delete(db: Session, cod_programa: int) -> bool:
         db.commit()
         return True
 
+    except HTTPException:
+        db.rollback()
+        raise
     except SQLAlchemyError as e:
         # Reversa la transacción si ocurre un error
         db.rollback()

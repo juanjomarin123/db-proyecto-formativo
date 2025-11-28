@@ -161,6 +161,11 @@ def delete_by_id(
         # Verifica si la eliminación fue exitosa (el CRUD debería retornar True si se eliminó).
         if user:
             return {"message": "Usuario eliminado correctamente"}
+        else:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    # Re-lanzar HTTPException para que se propague correctamente
+    except HTTPException:
+        raise
     # Captura errores de SQLAlchemy.
     except SQLAlchemyError as e:
         # Lanza una excepción HTTP 500.
@@ -190,6 +195,9 @@ def update_user(
             # Lanza una excepción 400 (Solicitud incorrecta) si no se pudo actualizar (ej. usuario no encontrado).
             raise HTTPException(status_code=400, detail="No se pudo actualizar el usuario")
         return {"message": "Usuario actualizado correctamente"}
+    # Re-lanzar HTTPException para que se propague correctamente
+    except HTTPException:
+        raise
     # Captura errores de SQLAlchemy.
     except SQLAlchemyError as e:
         # Lanza una excepción HTTP 500.
@@ -224,6 +232,9 @@ def update_password(
             # Lanza una excepción 400 si no se pudo actualizar.
             raise HTTPException(status_code=400, detail="No se pudo actualizar la contraseña del usuario")
         return {"message": "Contraseña actualizada correctamente"}
+    # Re-lanzar HTTPException para que se propague correctamente
+    except HTTPException:
+        raise
     # Captura errores de SQLAlchemy.
     except SQLAlchemyError as e:
         # Lanza una excepción HTTP 500.

@@ -149,7 +149,20 @@ def get_todos_registros_calificados(db: Session):
 
         results = db.execute(query).mappings().all()
 
-        return [dict(result) for result in results]
+        # Convertir resultados a diccionarios
+        registros = []
+        for result in results:
+            registro = dict(result)
+            # Convertir estado_catalogo a bool si es necesario
+            if registro.get('estado_catalogo') is not None:
+                if isinstance(registro['estado_catalogo'], str):
+                    registro['estado_catalogo'] = registro['estado_catalogo'].lower() in ('true', '1', 'activo', 'si', 'yes')
+                elif isinstance(registro['estado_catalogo'], int):
+                    registro['estado_catalogo'] = bool(registro['estado_catalogo'])
+            
+            registros.append(registro)
+        
+        return registros
 
     except SQLAlchemyError as e:
         logger.error(f"Error al obtener todos los registros calificados: {e}")

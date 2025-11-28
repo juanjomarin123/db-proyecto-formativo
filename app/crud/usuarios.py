@@ -115,9 +115,17 @@ def user_delete(db: Session, id: int): # Elimina un usuario de la base de datos 
             DELETE FROM usuario
             WHERE usuario.id_usuario = :el_id
         """)
-        db.execute(query, {"el_id": id})
+        result = db.execute(query, {"el_id": id})
+        
+        # Si no se afectó ninguna fila, el usuario no existe
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
         db.commit()
         return True
+    except HTTPException:
+        db.rollback()
+        raise
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error al eliminar usuario por id: {e}")
@@ -138,9 +146,17 @@ def update_user(db: Session, user_id: int, user_update: EditarUsuario) -> bool: 
 
         # Ejecuta la consulta de actualización
         query = text(f"UPDATE usuario SET {set_clause} WHERE id_usuario = :user_id")
-        db.execute(query, fields)
+        result = db.execute(query, fields)
+        
+        # Si no se modificó ninguna fila, el usuario no existe
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
         db.commit()
         return True
+    except HTTPException:
+        db.rollback()
+        raise
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error al actualizar usuario: {e}")
@@ -157,9 +173,17 @@ def update_password(db: Session, user_data: EditarPass) -> bool: # Cambia la con
         # Consulta para actualizar la contraseña en la base
         query = text(f""" UPDATE usuario SET contra_encript = :pass_encript 
                         WHERE id_usuario = :id_usuario """)
-        db.execute(query, datos_usuario)
+        result = db.execute(query, datos_usuario)
+        
+        # Si no se modificó ninguna fila, el usuario no existe
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
         db.commit()
         return True
+    except HTTPException:
+        db.rollback()
+        raise
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error al actualizar contraseña: {e}")

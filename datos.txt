@@ -79,6 +79,9 @@ pip install python-dotenv
 
 pip install passlib[bcrypt]
 
+pip install pandas fastapi uvicorn sqlalchemy pymysql python-dotenv openpyxl
+
+
 
 
 ### 3. Crear archivo de configuración de variables de entorno (.env)

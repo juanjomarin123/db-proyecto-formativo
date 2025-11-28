@@ -17,13 +17,14 @@ logger = logging.getLogger(__name__)
 # motor de base de datos con configuraciones optimas
 engine = create_engine(
     settings.DATABASE_URL,
-    echo=True,           # Activar o desactivar el modo debug para imprimir en consola todas las sentencias SQL
+    echo=False,          # Desactivar echo para evitar bloqueos en inicio
     pool_pre_ping=True,  # Verifica que las conexiones estén activas antes de usarlas
     pool_recycle=3600,   # Recicla conexiones después de una hora para evitar el error "connection has been closed"
-    pool_size=20,        # Número máximo de conexiones permanentes en el pool
-    max_overflow=30,     # Conexiones adicionales permitidas temporalmente cuando el pool está lleno
-    pool_timeout=30,     # Tiempo máximo de espera para obtener una conexión del pool
-    poolclass=QueuePool  # Clase de pool para manejo eficiente de conexiones
+    pool_size=5,         # Reducir pool size para evitar bloqueos
+    max_overflow=10,     # Reducir overflow
+    pool_timeout=5,      # Reducir timeout para fallar rápido si no hay conexión
+    poolclass=QueuePool,  # Clase de pool para manejo eficiente de conexiones
+    connect_args={"connect_timeout": 5}  # Timeout de conexión MySQL
 )
 
 

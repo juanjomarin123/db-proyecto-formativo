@@ -108,9 +108,17 @@ def delete_red(db: Session, id_red: int):
             DELETE FROM Redes_conocimiento
             WHERE id_red = :el_id
         """)
-        db.execute(query, {"el_id": id_red})
+        result = db.execute(query, {"el_id": id_red})
+        
+        # Si no se afectó ninguna fila, la red no existe
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Red de conocimiento no encontrada")
+        
         db.commit()
         return True
+    except HTTPException:
+        db.rollback()
+        raise
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error al eliminar red de conocimiento por id: {e}")
@@ -141,10 +149,18 @@ def update_red(db: Session, id_red: int, red_update: EditarRedConocimiento) -> b
             WHERE id_red = :id_red
         """)
 
-        db.execute(query, fields)
+        result = db.execute(query, fields)
+        
+        # Si no se modificó ninguna fila, la red no existe
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Red de conocimiento no encontrada")
+        
         db.commit()
         return True
 
+    except HTTPException:
+        db.rollback()
+        raise
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error al actualizar red de conocimiento: {e}")

@@ -1,7 +1,6 @@
-from ast import List
+from typing import List, Dict, Optional
 from copy import Error
 import os
-from typing import Dict
 from fastapi import UploadFile
 import pandas as pd
 from sqlalchemy import text
@@ -180,7 +179,7 @@ def insertar_programas_formacion(db: Session, lista_registros):
     return {
         "insertados": insertados,
         "actualizados": actualizados,
-        "total_procesados": insertados + actualizados,  # 👈 Total real de operaciones
+        "total_procesados": insertados + actualizados,  # Total real de operaciones
         "errores": errores
     }
 
@@ -217,7 +216,7 @@ def actualizar_estado_y_duracion(db: Session, lista_registros):
             unidad = "horas" if duracion > 30 else "meses"
 
             # Update SOLO esos 3 campos
-            result = db.execute(  # 👈 Capturamos el resultado
+            result = db.execute(  # Capturamos el resultado
                 text("""
                     UPDATE Programas_formacion
                     SET estado = :estado,
@@ -244,8 +243,8 @@ def actualizar_estado_y_duracion(db: Session, lista_registros):
 
     return {
         "actualizados": actualizados,
-        "no_encontrados": no_encontrados,  # 👈 Nuevo: programas que no existen
-        "total_procesados": actualizados + no_encontrados,  # 👈 Total de registros procesados
+        "no_encontrados": no_encontrados,  #  Nuevo: programas que no existen
+        "total_procesados": actualizados + no_encontrados,  #  Total de registros procesados
         "errores": errores
     }
 
