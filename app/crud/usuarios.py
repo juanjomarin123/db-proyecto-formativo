@@ -1,6 +1,3 @@
-
-
-
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -8,27 +5,18 @@ from sqlalchemy.exc import SQLAlchemyError
 from typing import Optional
 import logging  
 
-from app.schemas.usuarios import CrearUsuario, EditarPass, EditarUsuario, RetornoUsuario  
-# Importas los schemas (modelos Pydantic) que usas: para crear usuario, editar usuario, cambiar contraseña, y retornar usuario
+from app.schemas.usuarios import CrearUsuario, EditarPass, EditarUsuario, RetornoUsuario, UsuarioAuth
 from core.security import get_hashed_password, verify_password  
-# Importas funciones para manejar contraseñas: para encriptar y para verificar
 
-# Creas un logger específico para este módulo, con su nombre
 logger = logging.getLogger(__name__)  
 
-
-def create_user(db: Session, user: CrearUsuario) -> Optional[bool]: #Crea un usuario en la base de datos usando los datos del schema CrearUsuario.
+def create_user(db: Session, user: CrearUsuario) -> Optional[bool]:
     try:
-        # Convierte el objeto Pydantic (CrearUsuario) a un dict de Python
         dataUser = user.model_dump()
-        # Obtiene la contraseña “sin encriptar” desde ese diccionario
         contraOrigin = dataUser["contra_encript"]
-        # Encripta la contraseña original
         contraEncript = get_hashed_password(contraOrigin)
-        # Reemplaza en el dict la contraseña sin encriptar por la encriptada
         dataUser["contra_encript"] = contraEncript
 
-        # Define la consulta SQL para insertar el usuario
         query = text("""
             INSERT INTO usuario (
                 nombre_completo, num_documento, 
@@ -40,22 +28,25 @@ def create_user(db: Session, user: CrearUsuario) -> Optional[bool]: #Crea un usu
                 :estado
             )
         """)
-        # Ejecuta la consulta con los datos del usuario
         db.execute(query, dataUser)
-        # Hace commit para guardar los cambios en la base de datos
         db.commit()
-
-        return True  # Si todo sale bien, retorna True
-    except Exception as e:
-        # Si algo falla, deshace la transacción
+        return True
+    except SQLAlchemyError as e:
         db.rollback()
-        # Registra el error en el logger
         logger.error(f"Error al crear usuario: {e}")
-        # Lanza una excepción genérica con un mensaje más amigable
-        raise Exception("Error de base de datos al crear el usuario")
+        if "Duplicate entry" in str(e) or "duplicate key" in str(e):
+            if "correo" in str(e).lower():
+                raise HTTPException(status_code=400, detail="El correo ya está registrado")
+            elif "num_documento" in str(e).lower():
+                raise HTTPException(status_code=400, detail="El número de documento ya está registrado")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error inesperado al crear usuario: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-def get_user_by_id(db: Session, id_usuario: int): #Busca un usuario por su ID y retorna sus datos junto con el nombre del rol.
+def get_user_by_id(db: Session, id_usuario: int):
+    """Retorna un usuario por ID (sin contraseña)"""
     try:
         query = text("""
             SELECT usuario.id_usuario, usuario.nombre_completo, 
@@ -65,16 +56,24 @@ def get_user_by_id(db: Session, id_usuario: int): #Busca un usuario por su ID y 
             INNER JOIN rol ON usuario.id_rol = rol.id_rol
             WHERE usuario.id_usuario = :id_user
         """)
-        # Ejecuta la consulta, mapea resultados y toma el primero (o None si no existe)
         result = db.execute(query, {"id_user": id_usuario}).mappings().first()
-        return result
+        
+        if result is None:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Usuario con ID {id_usuario} no encontrado"
+            )
+        
+        # Convertir a RetornoUsuario
+        return RetornoUsuario(**dict(result))
+    except HTTPException:
+        raise
     except SQLAlchemyError as e:
-        logger.error(f"Error al buscar usuario por id: {e}")
-        raise Exception("Error de base de datos al buscar el usuario")
+        logger.error(f"Error al buscar usuario por id {id_usuario}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-def get_user_by_email(db: Session, un_correo: str): # Busca un usuario por correo (sin traer la contraseña).
-    """Busca un usuario por correo (sin traer la contraseña)."""
+def get_user_by_email(db: Session, un_correo: str):
+    """Retorna un usuario por correo (sin contraseña)"""
     try:
         query = text("""
             SELECT usuario.id_usuario, usuario.nombre_completo, 
@@ -84,14 +83,24 @@ def get_user_by_email(db: Session, un_correo: str): # Busca un usuario por corre
             INNER JOIN rol ON usuario.id_rol = rol.id_rol
             WHERE usuario.correo = :email
         """)
-        result = db.execute(query, {"email": un_correo}).mappings().first() #convierte el resultado en un diccionario y luego toma la primera fila.
-        return result
+        result = db.execute(query, {"email": un_correo}).mappings().first()
+        
+        if result is None:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Usuario con correo {un_correo} no encontrado"
+            )
+        
+        # Convertir a RetornoUsuario
+        return RetornoUsuario(**dict(result))
+    except HTTPException:
+        raise
     except SQLAlchemyError as e:
-        logger.error(f"Error al buscar usuario por email: {e}")
-        raise Exception("Error de base de datos al buscar el usuario por correo")
+        logger.error(f"Error al buscar usuario por email {un_correo}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-def get_user_by_email_security(db: Session, un_correo: str): # Busca un usuario por correo incluyendo su contraseña encriptada (para autenticación).
+def get_user_by_email_security(db: Session, un_correo: str):
+    """Retorna un usuario por correo CON contraseña (para autenticación)"""
     try:
         query = text("""
             SELECT usuario.id_usuario, usuario.nombre_completo, 
@@ -102,14 +111,24 @@ def get_user_by_email_security(db: Session, un_correo: str): # Busca un usuario 
             INNER JOIN rol ON usuario.id_rol = rol.id_rol
             WHERE usuario.correo = :email
         """)
-        result = db.execute(query, {"email": un_correo}).mappings().first() #convierte el resultado en un diccionario y luego toma la primera fila.
-        return result
+        result = db.execute(query, {"email": un_correo}).mappings().first()
+        
+        if result is None:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Usuario con correo {un_correo} no encontrado"
+            )
+        
+        # Convertir a UsuarioAuth (incluye contra_encript)
+        return UsuarioAuth(**dict(result))
+    except HTTPException:
+        raise
     except SQLAlchemyError as e:
-        logger.error(f"Error al buscar usuario por email: {e}")
-        raise Exception("Error de base de datos al buscar el usuario por correo")
+        logger.error(f"Error al buscar usuario por email {un_correo}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-def user_delete(db: Session, id: int): # Elimina un usuario de la base de datos por su ID
+def user_delete(db: Session, id: int) -> bool:
+    """Elimina un usuario por ID"""
     try:
         query = text("""
             DELETE FROM usuario
@@ -117,7 +136,6 @@ def user_delete(db: Session, id: int): # Elimina un usuario de la base de datos 
         """)
         result = db.execute(query, {"el_id": id})
         
-        # Si no se afectó ninguna fila, el usuario no existe
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         
@@ -128,27 +146,23 @@ def user_delete(db: Session, id: int): # Elimina un usuario de la base de datos 
         raise
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Error al eliminar usuario por id: {e}")
-        raise Exception("Error de base de datos al eliminar el usuario")
+        logger.error(f"Error al eliminar usuario {id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-def update_user(db: Session, user_id: int, user_update: EditarUsuario) -> bool: # Actualiza los campos de un usuario (nombre, correo, documento, estado).
+def update_user(db: Session, user_id: int, user_update: EditarUsuario) -> bool:
+    """Actualiza los datos de un usuario"""
     try:
-        # Convierte el esquema Pydantic a dict, excluyendo los campos que no se han seteado
         fields = user_update.model_dump(exclude_unset=True)
-        # Si no hay ningún campo para actualizar, retorna False
+        
         if not fields:
-            return False
-        # Crea la parte "SET campo = :campo" dinámicamente según los campos a actualizar
+            raise HTTPException(status_code=400, detail="No hay campos para actualizar")
+        
         set_clause = ", ".join([f"{key} = :{key}" for key in fields])
-        # Agrega el ID del usuario al diccionario de parámetros
         fields["user_id"] = user_id
 
-        # Ejecuta la consulta de actualización
         query = text(f"UPDATE usuario SET {set_clause} WHERE id_usuario = :user_id")
         result = db.execute(query, fields)
         
-        # Si no se modificó ninguna fila, el usuario no existe
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         
@@ -159,23 +173,19 @@ def update_user(db: Session, user_id: int, user_update: EditarUsuario) -> bool: 
         raise
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Error al actualizar usuario: {e}")
-        raise Exception("Error de base de datos al actualizar el usuario")
+        logger.error(f"Error al actualizar usuario {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-def update_password(db: Session, user_data: EditarPass) -> bool: # Cambia la contraseña de un usuario
+def update_password(db: Session, user_data: EditarPass) -> bool:
+    """Cambia la contraseña de un usuario"""
     try:
-        datos_usuario = user_data.model_dump()  # Convierte el esquema Pydantic a dict
-        # Encripta la nueva contraseña
+        datos_usuario = user_data.model_dump()
         contra_encript = get_hashed_password(datos_usuario['contra_nueva'])
         datos_usuario['pass_encript'] = contra_encript
 
-        # Consulta para actualizar la contraseña en la base
-        query = text(f""" UPDATE usuario SET contra_encript = :pass_encript 
-                        WHERE id_usuario = :id_usuario """)
+        query = text("UPDATE usuario SET contra_encript = :pass_encript WHERE id_usuario = :id_usuario")
         result = db.execute(query, datos_usuario)
         
-        # Si no se modificó ninguna fila, el usuario no existe
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         
@@ -186,33 +196,25 @@ def update_password(db: Session, user_data: EditarPass) -> bool: # Cambia la con
         raise
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Error al actualizar contraseña: {e}")
-        raise Exception("Error de base de datos al actualizar la contraseña")
+        logger.error(f"Error al actualizar contraseña usuario {user_data.id_usuario}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-def verify_user_pass(db: Session, user_data: EditarPass) -> bool: # Verifica que la contraseña anterior ingresada por el usuario sea correcta.
-    """"""
+def verify_user_pass(db: Session, user_data: EditarPass) -> bool:
+    """Verifica que la contraseña anterior sea correcta"""
     try:
-        query = text("""
-            SELECT usuario.contra_encript
-            FROM usuario
-            WHERE usuario.id_usuario = :id_user
-        """)
-        # Obtiene la contraseña encriptada desde la base para el usuario dado
+        query = text("SELECT usuario.contra_encript FROM usuario WHERE usuario.id_usuario = :id_user")
         result = db.execute(query, {"id_user": user_data.id_usuario}).mappings().first()
+        
         if result is None:
-            return False
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
         contra_en_db = result["contra_encript"]
         contra_anterior = user_data.contra_anterior
-
-        # Verifica la contraseña antigua usando la función de seguridad
         validated = verify_password(contra_anterior, contra_en_db)
-
-        # Retorna `True` si la contraseña ingresada coincide con la almacenada
-        if not validated:
-            return False
-        else:
-            return True
+        
+        return validated
+    except HTTPException:
+        raise
     except SQLAlchemyError as e:
-        logger.error(f"Error al validar la contraseña: {e}")
-        raise Exception("Error de base de datos al validar la contraseña")
+        logger.error(f"Error al validar la contraseña usuario {user_data.id_usuario}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")

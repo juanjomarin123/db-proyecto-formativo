@@ -1,12 +1,37 @@
 /* DRAWDB https://www.drawdb.app/editor?shareId=9f04e7ff5b67e7debca661d0b4791426 */ 
 
-
+-- Primero crear las tablas sin dependencias
 CREATE TABLE IF NOT EXISTS rol (
     id_rol SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     nombre_rol VARCHAR(20)
 );
 
+CREATE TABLE IF NOT EXISTS Redes_conocimiento (
+    id_red INTEGER AUTO_INCREMENT,
+    nombre VARCHAR(80) NOT NULL,
+    PRIMARY KEY (id_red)
+);
 
+-- Ahora crear Programas_formacion con clave primaria compuesta
+CREATE TABLE IF NOT EXISTS Programas_formacion (
+    cod_programa MEDIUMINT NOT NULL,
+    version CHAR(4) NOT NULL,
+    nombre VARCHAR(180) NOT NULL,
+    nivel VARCHAR(50),
+    id_red INTEGER,
+    tiempo_dur SMALLINT,
+    unidad_dur VARCHAR(20),
+    estado VARCHAR(50),
+    url_pdf VARCHAR(180),
+    PRIMARY KEY (cod_programa, version),  -- Clave primaria compuesta
+
+    FOREIGN KEY (id_red)
+        REFERENCES Redes_conocimiento(id_red)
+        ON UPDATE NO ACTION 
+        ON DELETE NO ACTION
+);
+
+-- Crear usuario después de rol
 CREATE TABLE IF NOT EXISTS usuario (
     id_usuario INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     nombre_completo VARCHAR(80),
@@ -20,35 +45,10 @@ CREATE TABLE IF NOT EXISTS usuario (
         REFERENCES rol(id_rol)
 );
 
-
-CREATE TABLE IF NOT EXISTS Redes_conocimiento (
-    id_red INTEGER AUTO_INCREMENT,
-    nombre VARCHAR(80) NOT NULL,
-    PRIMARY KEY (id_red)
-);
-
-
-CREATE TABLE IF NOT EXISTS Programas_formacion (
-    cod_programa MEDIUMINT,
-    version CHAR(4) NOT NULL,
-    nombre VARCHAR(180) NOT NULL,
-    nivel VARCHAR(50),
-    id_red INTEGER,
-    tiempo_dur SMALLINT,
-    unidad_dur VARCHAR(20),
-    estado VARCHAR(50),
-    url_pdf VARCHAR(180),
-    PRIMARY KEY (cod_programa),
-
-    FOREIGN KEY (id_red)
-        REFERENCES Redes_conocimiento(id_red)
-        ON UPDATE NO ACTION 
-        ON DELETE NO ACTION
-);
-
-
+-- Ahora crear Registro_calificado con clave foránea compuesta
 CREATE TABLE IF NOT EXISTS Registro_calificado (
-    cod_programa MEDIUMINT,
+    cod_programa MEDIUMINT NOT NULL,
+    version CHAR(4) NOT NULL,
     tipo_tramite VARCHAR(50),
     fecha_radicado DATE,
     numero_resolucion MEDIUMINT,
@@ -58,17 +58,19 @@ CREATE TABLE IF NOT EXISTS Registro_calificado (
     modalidad VARCHAR(25),
     clasificacion VARCHAR(15),
     estado_catalogo VARCHAR(50),
-    PRIMARY KEY (cod_programa),
+    PRIMARY KEY (cod_programa, version),  -- Clave primaria compuesta
 
-    FOREIGN KEY (cod_programa)
-        REFERENCES Programas_formacion(cod_programa)
+    FOREIGN KEY (cod_programa, version)
+        REFERENCES Programas_formacion(cod_programa, version)
         ON UPDATE NO ACTION 
         ON DELETE NO ACTION
 );
 
-
+-- Finalmente crear Indicadores_programa con número_ficha
 CREATE TABLE IF NOT EXISTS Indicadores_programa (
-    cod_programa MEDIUMINT,
+    numero_ficha INT UNSIGNED NOT NULL,  -- Nuevo campo único
+    cod_programa MEDIUMINT NOT NULL,
+    version CHAR(4) NOT NULL,
     indig_despl_viol_apr_tot SMALLINT,
     indig_despl_viol_cab_fam_apr_tot SMALLINT,
     afro_despl_viol_apr_tot SMALLINT,
@@ -123,12 +125,14 @@ CREATE TABLE IF NOT EXISTS Indicadores_programa (
     rem_cie_tot SMALLINT,
     gran_total SMALLINT,
     
-    PRIMARY KEY (cod_programa),
-
-    FOREIGN KEY (cod_programa)
-        REFERENCES Programas_formacion(cod_programa)
+    PRIMARY KEY (numero_ficha, cod_programa),  -- Clave primaria compuesta con número_ficha
+    
+    -- Clave foránea compuesta hacia Programas_formacion
+    FOREIGN KEY (cod_programa, version)
+        REFERENCES Programas_formacion(cod_programa, version)
         ON UPDATE NO ACTION 
-        ON DELETE NO ACTION
+        ON DELETE NO ACTION,
+    
+    -- Restricción única para numero_ficha (opcional, ya que es AUTO_INCREMENT)
+    UNIQUE (numero_ficha)
 );
-
-

@@ -1,15 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import text
+from typing import List, Optional
 
 from app.router.dependencies import get_current_user
-from app.schemas.indicadores_programa import (CrearIndicadoresPrograma,RetornoIndicadoresPrograma,EditarIndicadoresPrograma)
+from app.schemas.indicadores_programa import CrearIndicadoresPrograma, RetornoIndicadoresPrograma, EditarIndicadoresPrograma
 from app.schemas.usuarios import RetornoUsuario
 from core.database import get_db
-from app.crud.indicadores_programa import (crear_indicadores,get_indicadores_by_codPrograma,update_indicadores,indicadores_delete)
+from app.crud import indicadores_programa as crud
 
-router = APIRouter()
+router = APIRouter(prefix="/indicadores_programa")
 
+# ==================== ENDPOINTS CRUD BÁSICOS ====================
 
 @router.post("/registrar", status_code=status.HTTP_201_CREATED)
 def crear_indicadores_programa(
@@ -19,80 +22,295 @@ def crear_indicadores_programa(
 ):
     try:
         if user_token.id_rol != 1:
-            raise HTTPException(status_code=401, detail="No tienes permisos para crear indicadores de programa")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para crear indicadores de programa"
+            )
         
-        creado = crear_indicadores(db, indicadores)
+        creado = crud.crear_indicadores(db, indicadores)
 
         if creado:
-            return {"message": "Indicadores de programa creados correctamente"}
-        else:
-            return {"message": "Los indicadores de programa no pudieron ser creados correctamente"}
+            return {
+                "message": "Indicadores de programa creados correctamente",
+                "numero_ficha": indicadores.numero_ficha,
+                "cod_programa": indicadores.cod_programa,
+                "version": indicadores.version
+            }
     
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
-@router.get("/obtener-por-id/{cod_programa}", status_code=status.HTTP_200_OK, response_model=RetornoIndicadoresPrograma)
-def get_indicadores_by_cod(
-    cod_programa: int,
+# --- Ruta para obtener TODOS los indicadores ---
+@router.get("/", status_code=status.HTTP_200_OK, response_model=List[RetornoIndicadoresPrograma])
+def get_todos_indicadores(
     db: Session = Depends(get_db)
 ):
     try:
-        resultado = get_indicadores_by_codPrograma(db, cod_programa)
+        resultados = crud.get_todos_indicadores(db)
+        return resultados
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== RUTAS CON PREFIJOS FIJOS (PRIMERO) ====================
+
+# --- Ruta para obtener indicadores por número de ficha (único) ---
+@router.get("/ficha/{numero_ficha}", status_code=status.HTTP_200_OK, response_model=RetornoIndicadoresPrograma)
+def get_indicadores_by_ficha(
+    numero_ficha: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        resultado = crud.get_indicadores_by_numero_ficha(db, numero_ficha)
         return resultado
     except HTTPException:
         raise
-    except SQLAlchemyError as e:
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==================== ENDPOINTS DE ESTADÍSTICAS (PREFIJOS FIJOS) ====================
 
-@router.put("/editar/{cod_programa}", status_code=status.HTTP_200_OK)
-def editar_indicadores_programa(
+# **TODAS las rutas con prefijo /estadisticas/ van juntas y ANTES de las dinámicas**
+
+@router.get("/estadisticas/consolidado-general", status_code=status.HTTP_200_OK)
+def obtener_consolidado_general(
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene un consolidado general de todos los indicadores de todos los programas.
+    Útil para análisis a nivel institucional.
+    """
+    try:
+        query = text("""
+            SELECT 
+                COUNT(DISTINCT cod_programa) as total_programas,
+                COUNT(DISTINCT version) as total_versiones,
+                COUNT(*) as total_fichas,
+                SUM(COALESCE(gran_total, 0)) as total_participantes,
+                SUM(COALESCE(indig_apr_tot, 0)) as total_indigenas,
+                SUM(COALESCE(afro_apr_tot, 0)) as total_afrodescendientes,
+                SUM(COALESCE(discap_apr_tot, 0)) as total_discapacidad,
+                SUM(COALESCE(adol_conf_ley_apr_tot, 0)) as total_adolescentes_conflicto_ley,
+                SUM(COALESCE(inpec_apr_tot, 0)) as total_privados_libertad
+            FROM Indicadores_programa
+        """)
+        
+        resultado = db.execute(query).mappings().first()
+        consolidado = dict(resultado)
+        
+        # Calcular porcentajes
+        total_participantes = consolidado["total_participantes"]
+        if total_participantes > 0:
+            consolidado["porcentaje_indigenas"] = round((consolidado["total_indigenas"] / total_participantes) * 100, 2)
+            consolidado["porcentaje_afrodescendientes"] = round((consolidado["total_afrodescendientes"] / total_participantes) * 100, 2)
+            consolidado["porcentaje_discapacidad"] = round((consolidado["total_discapacidad"] / total_participantes) * 100, 2)
+            consolidado["porcentaje_adolescentes_conflicto"] = round((consolidado["total_adolescentes_conflicto_ley"] / total_participantes) * 100, 2)
+        
+        return consolidado
+        
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/estadisticas/totales/{cod_programa}", status_code=status.HTTP_200_OK)
+def obtener_estadisticas_totales(
     cod_programa: int,
+    version: Optional[str] = Query(None, description="Versión específica (opcional)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene estadísticas totales de indicadores para un programa.
+    Incluye sumas, promedios y porcentajes por categoría principal.
+    """
+    try:
+        estadisticas = crud.obtener_estadisticas_totales_programa(db, cod_programa, version)
+        return estadisticas
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/estadisticas/comparativa/{cod_programa}", status_code=status.HTTP_200_OK)
+def obtener_comparativa_versiones(
+    cod_programa: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Compara los indicadores entre diferentes versiones del mismo programa.
+    Muestra crecimiento y evolución de las métricas.
+    """
+    try:
+        comparativa = crud.obtener_comparativa_versiones_programa(db, cod_programa)
+        return comparativa
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/estadisticas/distribucion/{cod_programa}", status_code=status.HTTP_200_OK)
+def obtener_distribucion_porcentual(
+    cod_programa: int,
+    version: Optional[str] = Query(None, description="Versión específica (opcional)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene la distribución porcentual de las diferentes categorías de indicadores.
+    Permite analizar la composición de la población beneficiaria.
+    """
+    try:
+        distribucion = crud.obtener_distribucion_porcentual_categorias(db, cod_programa, version)
+        return distribucion
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/estadisticas/tendencias/{cod_programa}", status_code=status.HTTP_200_OK)
+def obtener_tendencias_historicas(
+    cod_programa: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Analiza las tendencias históricas de los indicadores a través de las versiones.
+    Identifica patrones de crecimiento y cambios en la composición poblacional.
+    """
+    try:
+        tendencias = crud.obtener_tendencias_historicas(db, cod_programa)
+        return tendencias
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/reporte/resumen/{cod_programa}", status_code=status.HTTP_200_OK)
+def generar_reporte_resumen(
+    cod_programa: int,
+    version: Optional[str] = Query(None, description="Versión específica (opcional)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Genera un reporte ejecutivo resumido con los datos más relevantes.
+    Ideal para presentaciones y dashboards.
+    """
+    try:
+        # Obtener todas las estadísticas en un solo endpoint
+        estadisticas = crud.obtener_estadisticas_totales_programa(db, cod_programa, version)
+        distribucion = crud.obtener_distribucion_porcentual_categorias(db, cod_programa, version)
+        
+        # Si no se especifica versión, obtener comparativa
+        if not version:
+            comparativa = crud.obtener_comparativa_versiones_programa(db, cod_programa)
+            return {
+                "tipo_reporte": "completo",
+                "programa": cod_programa,
+                "estadisticas_totales": estadisticas,
+                "distribucion_categorias": distribucion,
+                "comparativa_versiones": comparativa
+            }
+        else:
+            return {
+                "tipo_reporte": "por_version",
+                "programa": cod_programa,
+                "version": version,
+                "estadisticas_totales": estadisticas,
+                "distribucion_categorias": distribucion
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== RUTAS DINÁMICAS CON PARÁMETROS (AL FINAL) ====================
+
+# **IMPORTANTE: Estas rutas van AL FINAL porque son más genéricas**
+
+# --- Ruta para obtener TODOS los indicadores de un programa ---
+@router.get("/programa/{cod_programa}", status_code=status.HTTP_200_OK, response_model=List[RetornoIndicadoresPrograma])
+def get_indicadores_by_programa(
+    cod_programa: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene TODOS los registros de indicadores de un programa específico.
+    """
+    try:
+        resultados = crud.get_indicadores_by_cod_programa(db, cod_programa)
+        return resultados
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Ruta para obtener indicadores de un programa y versión específicos ---
+@router.get("/{cod_programa}/{version}", status_code=status.HTTP_200_OK, response_model=List[RetornoIndicadoresPrograma])
+def get_indicadores_by_programa_version(
+    cod_programa: int,
+    version: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene indicadores de un programa y versión específicos.
+    """
+    try:
+        resultados = crud.get_indicadores_by_programa_version(db, cod_programa, version)
+        return resultados
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/ficha/{numero_ficha}", status_code=status.HTTP_200_OK)
+def editar_indicadores_programa(
+    numero_ficha: int,
     indicadores_update: EditarIndicadoresPrograma,
     db: Session = Depends(get_db),
     user_token: RetornoUsuario = Depends(get_current_user)
 ):
     try:
         if user_token.id_rol != 1:
-            raise HTTPException(status_code=401, detail="No tienes permisos para editar indicadores de programa")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para editar indicadores de programa"
+            )
         
-        actualizado = update_indicadores(db, cod_programa, indicadores_update)
+        actualizado = crud.update_indicadores(db, numero_ficha, indicadores_update)
 
         if actualizado:
-            return {"message": "Indicadores de programa editados correctamente"}
-        else:
-            return {"message": "Los indicadores de programa no pudieron ser editados correctamente"}
+            return {
+                "message": "Indicadores de programa editados correctamente",
+                "numero_ficha": numero_ficha
+            }
     
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
-@router.delete("/eliminar/{cod_programa}", status_code=status.HTTP_200_OK)
+@router.delete("/ficha/{numero_ficha}", status_code=status.HTTP_200_OK)
 def eliminar_indicadores_programa(
-    cod_programa: int,
+    numero_ficha: int,
     db: Session = Depends(get_db),
     user_token: RetornoUsuario = Depends(get_current_user)
 ):
     try:
         if user_token.id_rol != 1:
-            raise HTTPException(status_code=401, detail="No tienes permisos para eliminar indicadores de programa")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para eliminar indicadores de programa"
+            )
         
-        eliminado = indicadores_delete(db, cod_programa)
+        eliminado = crud.indicadores_delete(db, numero_ficha)
 
         if eliminado:
-            return {"message": "Indicadores de programa eliminados correctamente"}
-        else:
-            return {"message": "Los indicadores de programa no pudieron ser eliminados correctamente"}
+            return {
+                "message": "Indicadores de programa eliminados correctamente",
+                "numero_ficha": numero_ficha
+            }
     
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

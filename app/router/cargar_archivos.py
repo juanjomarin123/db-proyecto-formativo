@@ -46,7 +46,7 @@ async def upload_redes(file: UploadFile = File(...), db: Session = Depends(get_d
 
 @router.post("/upload-excel-programas-registro_calificado/")
 async def upload_excel_programas(
-    file: UploadFile = File(..., max_size=50 * 1024 * 1024),  # ✅ 50MB límite
+    file: UploadFile = File(..., max_size=50 * 1024 * 1024),  #  50MB límite
     db: Session = Depends(get_db)
 ):
     """
@@ -142,7 +142,7 @@ async def upload_excel_programas(
                 total_actualizados += resultado_chunk.get("actualizados", 0)
                 total_registros_procesados += resultado_chunk.get("total_procesados", 0)
                 
-                print(f"✅ Chunk {chunk_num}: {resultado_chunk.get('insertados', 0)} nuevos, {resultado_chunk.get('actualizados', 0)} actualizados")
+                print(f" Chunk {chunk_num}: {resultado_chunk.get('insertados', 0)} nuevos, {resultado_chunk.get('actualizados', 0)} actualizados")
             
             chunks_procesados += 1
 
@@ -153,9 +153,9 @@ async def upload_excel_programas(
             "resumen": {
                 "total_filas_excel": total_filas,
                 "chunks_procesados": chunks_procesados,
-                "nuevos_registros": total_insertados,           # 👈 NUEVOS
-                "registros_actualizados": total_actualizados,   # 👈 ACTUALIZADOS
-                "total_procesados": total_registros_procesados, # 👈 TOTAL
+                "nuevos_registros": total_insertados,           #  NUEVOS
+                "registros_actualizados": total_actualizados,   #  ACTUALIZADOS
+                "total_procesados": total_registros_procesados, #  TOTAL
                 "tamaño_archivo_mb": f"{len(contents) / 1024 / 1024:.2f}"
             }
         }
@@ -163,12 +163,12 @@ async def upload_excel_programas(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error procesando Excel: {str(e)}")
+        print(f" Error procesando Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
 @router.post("/upload-excel-registro-calificado/")
 async def upload_excel_registro_calificado(
-    file: UploadFile = File(..., max_size=50 * 1024 * 1024),  # ✅ 50MB límite
+    file: UploadFile = File(..., max_size=50 * 1024 * 1024),  #  50MB límite
     db: Session = Depends(get_db)
 ):
     """
@@ -220,7 +220,7 @@ async def upload_excel_registro_calificado(
 
             registros_chunk.append(registro)
         
-        print(f"✅ Chunk {numero_chunk}: {len(registros_chunk)} registros válidos")
+        print(f" Chunk {numero_chunk}: {len(registros_chunk)} registros válidos")
         return registros_chunk
 
     try:
@@ -243,7 +243,7 @@ async def upload_excel_registro_calificado(
         })
 
         total_filas = len(df)
-        print(f"📊 Excel cargado: {total_filas} filas")
+        print(f" Excel cargado: {total_filas} filas")
 
         # CONFIGURACIÓN DE CHUNKS
         CHUNK_SIZE = 500  # Procesar 500 filas a la vez
@@ -252,7 +252,7 @@ async def upload_excel_registro_calificado(
         total_registros_procesados = 0
         chunks_procesados = 0
 
-        print(f"🔄 Iniciando procesamiento en chunks de {CHUNK_SIZE} filas...")
+        print(f" Iniciando procesamiento en chunks de {CHUNK_SIZE} filas...")
 
         # PROCESAR POR CHUNKS
         for chunk_num, start_idx in enumerate(range(0, total_filas, CHUNK_SIZE), 1):
@@ -268,7 +268,7 @@ async def upload_excel_registro_calificado(
             if registros_chunk:
                 resultado_chunk = insertar_registro_calificado(db, registros_chunk)
                 
-                # 👇 ACTUALIZAR CONTADORES CON LAS ESTADÍSTICAS
+                #  ACTUALIZAR CONTADORES CON LAS ESTADÍSTICAS
                 total_insertados += resultado_chunk.get("insertados", 0)
                 total_actualizados += resultado_chunk.get("actualizados", 0)
                 total_registros_procesados += len(registros_chunk)
@@ -294,7 +294,7 @@ async def upload_excel_registro_calificado(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error procesando Excel: {str(e)}")
+        print(f" Error procesando Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
     
 
@@ -332,7 +332,7 @@ async def upload_excel_estado_duracion(
 
             registros_chunk.append(registro)
         
-        print(f"✅ Chunk {numero_chunk}: {len(registros_chunk)} registros válidos")
+        print(f" Chunk {numero_chunk}: {len(registros_chunk)} registros válidos")
         return registros_chunk
 
     try:
@@ -347,7 +347,7 @@ async def upload_excel_estado_duracion(
         )
 
         df.columns = df.columns.str.strip()
-        print("📊 COLUMNAS ENCONTRADAS:", df.columns.tolist())
+        print(" COLUMNAS ENCONTRADAS:", df.columns.tolist())
         
         # Renombrar columnas para trabajarlas internas
         df = df.rename(columns={
@@ -367,7 +367,7 @@ async def upload_excel_estado_duracion(
                 )
 
         total_filas = len(df)
-        print(f"📊 Excel cargado: {total_filas} filas")
+        print(f" Excel cargado: {total_filas} filas")
 
         # CONFIGURACIÓN DE CHUNKS
         CHUNK_SIZE = 500  # Procesar 500 filas a la vez
@@ -376,14 +376,14 @@ async def upload_excel_estado_duracion(
         total_registros_procesados = 0
         chunks_procesados = 0
 
-        print(f"🔄 Iniciando procesamiento en chunks de {CHUNK_SIZE} filas...")
+        print(f" Iniciando procesamiento en chunks de {CHUNK_SIZE} filas...")
 
         # PROCESAR POR CHUNKS
         for chunk_num, start_idx in enumerate(range(0, total_filas, CHUNK_SIZE), 1):
             end_idx = min(start_idx + CHUNK_SIZE, total_filas)
             chunk_df = df.iloc[start_idx:end_idx]
             
-            print(f"📦 Procesando chunk {chunk_num}: filas {start_idx + 1} a {end_idx}")
+            print(f" Procesando chunk {chunk_num}: filas {start_idx + 1} a {end_idx}")
             
             # Procesar este chunk
             registros_chunk = procesar_chunk(chunk_df, chunk_num)
@@ -392,7 +392,7 @@ async def upload_excel_estado_duracion(
             if registros_chunk:
                 resultado_chunk = actualizar_estado_y_duracion(db, registros_chunk)
                 
-                # 👇 ACTUALIZAR CONTADORES CON LAS NUEVAS ESTADÍSTICAS
+                #  ACTUALIZAR CONTADORES CON LAS NUEVAS ESTADÍSTICAS
                 total_actualizados += resultado_chunk.get("actualizados", 0)
                 total_no_encontrados += resultado_chunk.get("no_encontrados", 0)
                 total_registros_procesados += resultado_chunk.get("total_procesados", 0)
@@ -401,7 +401,7 @@ async def upload_excel_estado_duracion(
             
             chunks_procesados += 1
 
-        print(f"🎉 Procesamiento completado: {total_actualizados} actualizados, {total_no_encontrados} no encontrados")
+        print(f" Procesamiento completado: {total_actualizados} actualizados, {total_no_encontrados} no encontrados")
 
         return {
             "mensaje": "Actualización completada exitosamente",
@@ -418,7 +418,7 @@ async def upload_excel_estado_duracion(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error procesando Excel: {str(e)}")
+        print(f" Error procesando Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
 
@@ -426,7 +426,7 @@ async def upload_excel_estado_duracion(
 
 @router.post("/upload-excel-indicadores-programa/")
 async def upload_excel_indicadores_programa(
-    file: UploadFile = File(..., max_size=50 * 1024 * 1024),  # ✅ 50MB límite
+    file: UploadFile = File(..., max_size=50 * 1024 * 1024),  #  50MB límite
     db: Session = Depends(get_db)
 ):
     """
@@ -498,7 +498,7 @@ async def upload_excel_indicadores_programa(
 
             registros_chunk.append(registro)
 
-        print(f"✅ Chunk {numero_chunk}: {len(registros_chunk)} registros válidos")
+        print(f" Chunk {numero_chunk}: {len(registros_chunk)} registros válidos")
         return registros_chunk, filas_sin_nombre, filas_vacias
 
     try:
@@ -591,7 +591,7 @@ async def upload_excel_indicadores_programa(
         df = df.rename(columns=columnas_existentes)
         columnas_mapeadas = list(columnas_existentes.values())
 
-        print(f"📊 Excel cargado: {len(df)} filas, {len(columnas_mapeadas)} columnas mapeadas")
+        print(f" Excel cargado: {len(df)} filas, {len(columnas_mapeadas)} columnas mapeadas")
 
         # CONFIGURACIÓN DE CHUNKS
         CHUNK_SIZE = 500  # Procesar 500 filas a la vez
@@ -601,14 +601,14 @@ async def upload_excel_indicadores_programa(
         total_filas_vacias = 0
         chunks_procesados = 0
 
-        print(f"🔄 Iniciando procesamiento en chunks de {CHUNK_SIZE} filas...")
+        print(f" Iniciando procesamiento en chunks de {CHUNK_SIZE} filas...")
 
         # PROCESAR POR CHUNKS
         for chunk_num, start_idx in enumerate(range(0, total_filas, CHUNK_SIZE), 1):
             end_idx = min(start_idx + CHUNK_SIZE, total_filas)
             chunk_df = df.iloc[start_idx:end_idx]
             
-            print(f"📦 Procesando chunk {chunk_num}: filas {start_idx + 1} a {end_idx}")
+            print(f" Procesando chunk {chunk_num}: filas {start_idx + 1} a {end_idx}")
             
             # Procesar este chunk
             registros_chunk, sin_nombre, vacias = procesar_chunk(chunk_df, chunk_num)
@@ -619,11 +619,11 @@ async def upload_excel_indicadores_programa(
             if registros_chunk:
                 resultado_chunk = insertar_indicadores_programa(db, registros_chunk)
                 total_registros_procesados += resultado_chunk.get("total_procesados", 0)
-                print(f"✅ Chunk {chunk_num} insertado: {len(registros_chunk)} registros")
+                print(f" Chunk {chunk_num} insertado: {len(registros_chunk)} registros")
             
             chunks_procesados += 1
 
-        print(f"🎉 Procesamiento completado: {total_registros_procesados} registros de {total_filas} filas")
+        print(f" Procesamiento completado: {total_registros_procesados} registros de {total_filas} filas")
 
         return {
             "mensaje": "Proceso de carga completado exitosamente",
@@ -641,5 +641,5 @@ async def upload_excel_indicadores_programa(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error procesando Excel: {str(e)}")
+        print(f" Error procesando Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")

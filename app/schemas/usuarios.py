@@ -1,5 +1,3 @@
-#contrato de datos entre el cliente y el servidor para todo lo relacionado con la información del usuario.
-
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field  
 
@@ -31,6 +29,11 @@ class RetornoUsuario(UsuarioBase):
     estado: bool
     # Nombre del rol del usuario, para que no solo devuelvas el id del rol sino su nombre descriptivo
     nombre_rol: str
+
+
+# NUEVO: Esquema para autenticación (incluye contra_encript)
+class UsuarioAuth(RetornoUsuario):
+    contra_encript: str  # Agrega solo este campo extra para autenticación
 
 
 # Esquema para editar (modificar) datos de usuario

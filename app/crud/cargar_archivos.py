@@ -133,7 +133,7 @@ def insertar_programas_formacion(db: Session, lista_registros):
             id_red = resultado[0]
 
             # Insert / Update en Programas_formacion y CAPTURAR RESULTADO
-            result = db.execute(  # 👈 Capturamos el resultado
+            result = db.execute(  # Capturamos el resultado
                 text("""
                     INSERT INTO Programas_formacion (
                         cod_programa, version, nombre, nivel, id_red, tiempo_dur, unidad_dur, estado, url_pdf
@@ -232,7 +232,7 @@ def actualizar_estado_y_duracion(db: Session, lista_registros):
                 }
             )
 
-            # 👇 Verificar si realmente se actualizó el registro
+            #  Verificar si realmente se actualizó el registro
             if result.rowcount > 0:
                 actualizados += 1
 

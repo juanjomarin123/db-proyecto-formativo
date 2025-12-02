@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 import logging 
 from sqlalchemy import text
-from typing import Optional
+from typing import Optional, List
 
 from app.schemas.registro_calificado import CrearRegistroCalificado, RetornoRegistroCalificado, EditarRegistroCalificado
 
@@ -16,6 +16,7 @@ def crear_registro_calificado(db: Session, registro: CrearRegistroCalificado) ->
         query = text("""
             INSERT INTO Registro_calificado(
                      cod_programa,
+                     version,  -- NUEVO CAMPO
                      tipo_tramite,
                      fecha_radicado,
                      numero_resolucion,
@@ -27,6 +28,7 @@ def crear_registro_calificado(db: Session, registro: CrearRegistroCalificado) ->
                      estado_catalogo
                      ) VALUES(
                      :cod_programa,
+                     :version,  -- NUEVO CAMPO
                      :tipo_tramite,
                      :fecha_radicado,
                      :numero_resolucion,
@@ -38,24 +40,29 @@ def crear_registro_calificado(db: Session, registro: CrearRegistroCalificado) ->
                      :estado_catalogo
             )
         """)
-        db.execute(query,dataRegistro)
+        db.execute(query, dataRegistro)
         db.commit()
         return True     
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error al crear registro calificado: {e}")
-        raise Exception("Error de base de datos al crear el registro calificado")
-    
+        if "Duplicate entry" in str(e) or "duplicate key" in str(e):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Ya existe un registro para el programa {registro.cod_programa} versión {registro.version}"
+            )
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error inesperado al crear registro calificado: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-
-
-
-def get_registro_by_cod_programa(db: Session, cod_programa: int):
+def get_registro_by_cod_programa(db: Session, cod_programa: int, version: str) -> Optional[dict]:
     try:
         query = text("""
             SELECT 
                 cod_programa,
+                version,  -- NUEVO CAMPO
                 tipo_tramite,
                 fecha_radicado,
                 numero_resolucion,
@@ -66,34 +73,31 @@ def get_registro_by_cod_programa(db: Session, cod_programa: int):
                 clasificacion,
                 estado_catalogo
             FROM Registro_calificado
-            WHERE cod_programa = :cod_programa
+            WHERE cod_programa = :cod_programa AND version = :version
         """)
 
-        result = db.execute(query, {"cod_programa": cod_programa}).mappings().first()
+        result = db.execute(query, {"cod_programa": cod_programa, "version": version}).mappings().first()
 
         if result is None:
-            raise HTTPException(status_code=404, detail="No existe el registro calificado")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No existe registro calificado para el programa {cod_programa} versión {version}"
+            )
 
         return dict(result)
 
     except HTTPException:
-        # Re-lanzar HTTPException para que se propague correctamente
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Error al obtener el registro calificado: {e}")
-        raise Exception("Error de base de datos al obtener el registro calificado")
-    
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-
-
-
-def get_todo_by_cod_programa(db: Session, cod_programa: int):
+def get_todos_registros_por_programa(db: Session, cod_programa: int) -> List[dict]:
     try:
-        # Se construye una consulta SQL cruda usando text()
         query = text("""
             SELECT 
                 cod_programa,
+                version,
                 tipo_tramite,
                 fecha_radicado,
                 numero_resolucion,
@@ -105,36 +109,31 @@ def get_todo_by_cod_programa(db: Session, cod_programa: int):
                 estado_catalogo
             FROM Registro_calificado
             WHERE cod_programa = :cod_programa
+            ORDER BY version DESC
         """)
 
-        # Se ejecuta la consulta pasando el parámetro cod_programa
-        # .mappings() transforma cada fila en un diccionario-like
-        # .all() devuelve todas las coincidencias
         results = db.execute(query, {"cod_programa": cod_programa}).mappings().all()
 
-        # Si no se encontraron filas, se lanza un error 404
         if not results:
-            raise HTTPException(status_code=404, detail="No existen registros para este cod_programa")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No existen registros para el programa {cod_programa}"
+            )
 
-        # Se convierten los resultados a una lista de diccionarios estándar
         return [dict(result) for result in results]
 
     except HTTPException:
         raise
     except SQLAlchemyError as e:
-        # Se captura cualquier error de base de datos y se relanza con un mensaje claro
-        raise Exception(f"Error de base de datos: {e}")
+        logger.error(f"Error al obtener registros por programa: {e}")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-
-
-
-
-def get_todos_registros_calificados(db: Session):
+def get_todos_registros_calificados(db: Session) -> List[dict]:
     try:
         query = text("""
             SELECT 
                 cod_programa,
+                version,
                 tipo_tramite,
                 fecha_radicado,
                 numero_resolucion,
@@ -145,54 +144,49 @@ def get_todos_registros_calificados(db: Session):
                 clasificacion,
                 estado_catalogo
             FROM Registro_calificado
+            ORDER BY cod_programa, version DESC
         """)
 
         results = db.execute(query).mappings().all()
-
-        # Convertir resultados a diccionarios
+        
         registros = []
         for result in results:
             registro = dict(result)
-            # Convertir estado_catalogo a bool si es necesario
-            if registro.get('estado_catalogo') is not None:
-                if isinstance(registro['estado_catalogo'], str):
-                    registro['estado_catalogo'] = registro['estado_catalogo'].lower() in ('true', '1', 'activo', 'si', 'yes')
-                elif isinstance(registro['estado_catalogo'], int):
-                    registro['estado_catalogo'] = bool(registro['estado_catalogo'])
-            
             registros.append(registro)
         
         return registros
 
     except SQLAlchemyError as e:
         logger.error(f"Error al obtener todos los registros calificados: {e}")
-        raise Exception("Error de base de datos al obtener todos los registros calificados")
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-    
-
-
-
-
-def update_registro_calificado(db: Session, cod_programa: int, registro: EditarRegistroCalificado) -> Optional[bool]:
+def update_registro_calificado(
+    db: Session, cod_programa: int, version: str, registro: EditarRegistroCalificado
+) -> Optional[bool]:
     try:
         dataRegistro = registro.model_dump(exclude_unset=True)
         
-        # Construir dinámicamente la parte SET de la consulta SQL
+        if not dataRegistro:
+            raise HTTPException(status_code=400, detail="No hay campos para actualizar")
+        
         set_clause = ", ".join([f"{key} = :{key}" for key in dataRegistro.keys()])
         
         query = text(f"""
             UPDATE Registro_calificado
             SET {set_clause}
-            WHERE cod_programa = :cod_programa
+            WHERE cod_programa = :cod_programa AND version = :version
         """)
         
-        # Agregar cod_programa a los parámetros
         dataRegistro["cod_programa"] = cod_programa
+        dataRegistro["version"] = version
         
         result = db.execute(query, dataRegistro)
         
         if result.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Registro calificado no encontrado")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Registro calificado para programa {cod_programa} versión {version} no encontrado"
+            )
         
         db.commit()
         return True
@@ -200,28 +194,25 @@ def update_registro_calificado(db: Session, cod_programa: int, registro: EditarR
     except HTTPException:
         db.rollback()
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error al actualizar el registro calificado: {e}")
-        raise Exception("Error de base de datos al actualizar el registro calificado")
-    
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
 
-
-
-
-
-
-def delete_registro_calificado(db: Session, cod_programa: int) -> Optional[bool]:
+def delete_registro_calificado(db: Session, cod_programa: int, version: str) -> Optional[bool]:
     try:
         query = text("""
             DELETE FROM Registro_calificado
-            WHERE cod_programa = :cod_programa
+            WHERE cod_programa = :cod_programa AND version = :version
         """)
         
-        result = db.execute(query, {"cod_programa": cod_programa})
+        result = db.execute(query, {"cod_programa": cod_programa, "version": version})
         
         if result.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Registro calificado no encontrado")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Registro calificado para programa {cod_programa} versión {version} no encontrado"
+            )
         
         db.commit()
         return True
@@ -229,11 +220,7 @@ def delete_registro_calificado(db: Session, cod_programa: int) -> Optional[bool]
     except HTTPException:
         db.rollback()
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error al eliminar el registro calificado: {e}")
-        raise Exception("Error de base de datos al eliminar el registro calificado")
-
-
-
-
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
